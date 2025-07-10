@@ -1,61 +1,38 @@
 import tkinter as tk
 from tkinter import ttk, messagebox, scrolledtext, filedialog
-import praw
-import pandas as pd
-from textblob import TextBlob
-from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-import seaborn as sns
-from datetime import datetime
-import re
 import threading
-import os
-from dotenv import load_dotenv
+from sentiment_analyzer import SentimentAnalyzer
 
 # Set matplotlib to use TkAgg backend for GUI integration
 plt.switch_backend('TkAgg')
-load_dotenv()
+
 class RedditSentimentGUI:
     def __init__(self, root):
         self.root = root
         self.root.title("Reddit Sentiment Analysis Tool")
         self.root.geometry("1200x800")
         
-        # Reddit API Configuration - UPDATE THESE WITH YOUR CREDENTIALS
-        self.CLIENT_ID = os.getenv('CLIENT_ID')
-        self.CLIENT_SECRET = os.getenv('CLIENT_SECRET')
-        self.USER_AGENT = os.getenv('USER_AGENT')
-        # Initialize variables
-        self.reddit = None
-        self.vader_analyzer = SentimentIntensityAnalyzer()
-        self.top_subreddits = []
+        # Initialize sentiment analyzer
+        self.analyzer = SentimentAnalyzer()
         self.analysis_results = None
         
-        # Initialize Reddit connection
-        self.initialize_reddit()
+        # Check if Reddit API is connected
+        if not self.analyzer.reddit:
+            messagebox.showerror("API Error", 
+                               "Failed to connect to Reddit API. Please check your .env file.\n\n" +
+                               "Required variables:\n" +
+                               "CLIENT_ID=your_reddit_client_id\n" +
+                               "CLIENT_SECRET=your_reddit_client_secret\n" +
+                               "USER_AGENT=your_user_agent")
         
         # Create the GUI
         self.create_widgets()
         
-        # Load top subreddits in background
-        self.load_top_subreddits()
+        # Load popular subreddits
+        self.load_subreddits()
 
-    def initialize_reddit(self):
-        """Initialize Reddit API connection"""
-        try:
-            self.reddit = praw.Reddit(
-                client_id=self.CLIENT_ID,
-                client_secret=self.CLIENT_SECRET,
-                user_agent=self.USER_AGENT
-            )
-            # Test the connection
-            self.reddit.user.me()
-            print("Reddit API connection successful!")
-        except Exception as e:
-            print(f"Failed to connect to Reddit API: {str(e)}")
-            # You could show a messagebox here if needed
-    
     def create_widgets(self):
         """Create all GUI widgets"""
         # Main container
@@ -88,7 +65,7 @@ class RedditSentimentGUI:
         self.subreddit_combo = ttk.Combobox(subreddit_frame, textvariable=self.subreddit_var, width=30)
         self.subreddit_combo.grid(row=0, column=0, sticky=(tk.W, tk.E), padx=(0, 10))
         
-        ttk.Button(subreddit_frame, text="Refresh Top 100", command=self.load_top_subreddits).grid(row=0, column=1)
+        ttk.Button(subreddit_frame, text="Refresh Top 100", command=self.load_subreddits).grid(row=0, column=1)
         
         # Number of posts
         ttk.Label(config_frame, text="Number of Posts:").grid(row=1, column=0, sticky=tk.W, padx=(0, 10), pady=(10, 0))
@@ -122,7 +99,7 @@ class RedditSentimentGUI:
         results_frame = ttk.LabelFrame(main_frame, text="Results", padding="10")
         results_frame.grid(row=2, column=0, columnspan=3, sticky=(tk.W, tk.E, tk.N, tk.S), pady=(0, 10))
         results_frame.columnconfigure(0, weight=1)
-        results_frame.rowconfigure(1, weight=1)
+        results_frame.rowconfigure(0, weight=1)
         main_frame.rowconfigure(2, weight=1)
         
         # Results notebook (tabs)
@@ -151,135 +128,22 @@ class RedditSentimentGUI:
         ttk.Button(export_frame, text="Export CSV", command=self.export_csv).pack(side=tk.LEFT, padx=(0, 10))
         ttk.Button(export_frame, text="Export Summary", command=self.export_summary).pack(side=tk.LEFT)
     
-    def load_top_subreddits(self):
-        """Load top 100 subreddits"""
-        self.status_var.set("Loading top subreddits...")
-        
-        # Pre-defined top 100 popular subreddits (you can update this list)
-        popular_subreddits = [
-            "funny", "AskReddit", "gaming", "aww", "Music", "pics", "science", "worldnews",
-            "videos", "todayilearned", "news", "movies", "Showerthoughts", "EarthPorn", "food",
-            "mildlyinteresting", "space", "sports", "television", "Art", "books", "personalfinance",
-            "technology", "programming", "Python", "MachineLearning", "datascience", "artificial",
-            "cryptocurrency", "stocks", "investing", "politics", "unpopularopinion", "LifeProTips",
-            "explainlikeimfive", "NoStupidQuestions", "AskHistorians", "AskScience", "relationship_advice",
-            "AmItheAsshole", "tifu", "confession", "self", "depression", "anxiety", "getmotivated",
-            "fitness", "loseit", "running", "bodyweightfitness", "nutrition", "recipes", "MealPrepSunday",
-            "DIY", "HomeImprovement", "gardening", "camping", "hiking", "travel", "solotravel",
-            "backpacking", "photography", "itookapicture", "analog", "streetphotography", "cats",
-            "dogs", "AnimalsBeingJerks", "AnimalsBeingBros", "rarepuppers", "Eyebleach", "NatureIsFuckingLit",
-            "interestingasfuck", "Damnthatsinteresting", "oddlysatisfying", "mildlyinfuriating",
-            "CrappyDesign", "DesignPorn", "battlestations", "pcmasterrace", "buildapc", "mechmarket",
-            "Android", "iphone", "apple", "gadgets", "futurology", "singularity", "cyberpunk",
-            "startrek", "starwars", "marvelstudios", "DC_Cinematic", "moviedetails", "moviesuggestions",
-            "netflix", "television", "gameofthrones", "anime", "manga", "cosplay", "DnD",
-            "boardgames", "chess", "soccer", "nfl", "nba", "baseball", "hockey", "mma",
-            "formula1", "tennis", "golf", "olympics", "cscareerquestions", "csMajors", "EngineeringStudents"
-        ]
-        
-        self.top_subreddits = popular_subreddits
+    def load_subreddits(self):
+        """Load popular subreddits into the dropdown"""
+        self.status_var.set("Loading subreddits...")
+        popular_subreddits = self.analyzer.get_popular_subreddits()
         self.subreddit_combo['values'] = popular_subreddits
-        self.status_var.set("Top subreddits loaded")
-
-    def clean_text(self, text):
-        """Clean and preprocess text for sentiment analysis"""
-        if not text:
-            return ""
-        
-        text = re.sub(r'http\S+|www\S+|https\S+', '', text, flags=re.MULTILINE)
-        text = re.sub(r'@\w+|u/\w+|r/\w+', '', text)
-        text = ' '.join(text.split())
-        return text
+        self.status_var.set("Subreddits loaded")
     
-    def analyze_sentiment_textblob(self, text):
-        """Analyze sentiment using TextBlob"""
-        blob = TextBlob(text)
-        polarity = blob.sentiment.polarity
-        
-        if polarity > 0.1:
-            return 'positive', polarity
-        elif polarity < -0.1:
-            return 'negative', polarity
-        else:
-            return 'neutral', polarity
-    
-    def analyze_sentiment_vader(self, text):
-        """Analyze sentiment using VADER"""
-        scores = self.vader_analyzer.polarity_scores(text)
-        compound = scores['compound']
-        
-        if compound >= 0.05:
-            return 'positive', compound
-        elif compound <= -0.05:
-            return 'negative', compound
-        else:
-            return 'neutral', compound
-    
-    def get_posts(self, subreddit_name, limit, time_filter):
-        """Fetch posts from subreddit"""
-        posts = []
-        
-        try:
-            subreddit = self.reddit.subreddit(subreddit_name)
-            
-            for i, post in enumerate(subreddit.top(time_filter=time_filter, limit=limit)):
-                posts.append({
-                    'title': post.title,
-                    'text': post.selftext,
-                    'score': post.score,
-                    'num_comments': post.num_comments,
-                    'created_utc': datetime.fromtimestamp(post.created_utc),
-                    'url': post.url,
-                    'id': post.id
-                })
-                
-                # Update progress
-                progress = (i + 1) / limit * 50  # First 50% for fetching
-                self.progress_var.set(progress)
-                self.root.update_idletasks()
-                
-        except Exception as e:
-            raise Exception(f"Error fetching posts: {str(e)}")
-            
-        return posts
-    
-    def analyze_posts(self, posts):
-        """Analyze sentiment of posts"""
-        results = []
-        
-        for i, post in enumerate(posts):
-            combined_text = f"{post['title']} {post['text']}"
-            clean_combined = self.clean_text(combined_text)
-            
-            if clean_combined:
-                tb_sentiment, tb_score = self.analyze_sentiment_textblob(clean_combined)
-                vader_sentiment, vader_score = self.analyze_sentiment_vader(clean_combined)
-                
-                results.append({
-                    'post_id': post['id'],
-                    'title': post['title'],
-                    'text': post['text'][:200] + '...' if len(post['text']) > 200 else post['text'],
-                    'score': post['score'],
-                    'num_comments': post['num_comments'],
-                    'created_date': post['created_utc'],
-                    'textblob_sentiment': tb_sentiment,
-                    'textblob_score': tb_score,
-                    'vader_sentiment': vader_sentiment,
-                    'vader_score': vader_score,
-                    'url': post['url']
-                })
-            
-            # Update progress (second 50%)
-            progress = 50 + (i + 1) / len(posts) * 50
-            self.progress_var.set(progress)
-            self.root.update_idletasks()
-        
-        return pd.DataFrame(results)
+    def progress_callback(self, progress):
+        """Callback function to update progress bar"""
+        self.progress_var.set(progress)
+        self.root.update_idletasks()
 
     def start_analysis(self):
         """Start the sentiment analysis in a separate thread"""
-        if not self.reddit:
-            messagebox.showerror("Error", "Reddit API connection not established. Please check your credentials in the code.")
+        if not self.analyzer.reddit:
+            messagebox.showerror("Error", "Reddit API connection not established. Please check your .env file.")
             return
         
         if not self.subreddit_var.get():
@@ -301,20 +165,16 @@ class RedditSentimentGUI:
             num_posts = int(self.num_posts_var.get())
             time_filter = self.time_filter_var.get()
             
-            self.status_var.set("Fetching posts...")
+            self.status_var.set("Starting analysis...")
             self.progress_var.set(0)
             
-            # Fetch posts
-            posts = self.get_posts(subreddit_name, num_posts, time_filter)
-            
-            if not posts:
-                self.status_var.set("No posts found")
-                return
-            
-            self.status_var.set("Analyzing sentiment...")
-            
-            # Analyze sentiment
-            self.analysis_results = self.analyze_posts(posts)
+            # Perform analysis using the analyzer
+            self.analysis_results = self.analyzer.analyze_subreddit(
+                subreddit_name, 
+                num_posts, 
+                time_filter, 
+                self.progress_callback
+            )
             
             # Update GUI with results
             self.root.after(0, self.display_results, subreddit_name)
@@ -347,42 +207,40 @@ class RedditSentimentGUI:
         self.status_var.set(f"Analysis complete for r/{subreddit_name}")
     
     def generate_summary_text(self, df, subreddit_name):
-        """Generate summary text"""
+        """Generate summary text using analyzer stats"""
+        stats = self.analyzer.generate_summary_stats(df)
+        
         summary = f"SENTIMENT ANALYSIS REPORT FOR r/{subreddit_name}\n"
         summary += "=" * 60 + "\n\n"
         
-        summary += f"Total posts analyzed: {len(df)}\n"
-        summary += f"Date range: {df['created_date'].min()} to {df['created_date'].max()}\n\n"
+        summary += f"Total posts analyzed: {stats['total_posts']}\n"
+        summary += f"Date range: {stats['date_range']['start']} to {stats['date_range']['end']}\n\n"
         
         # TextBlob sentiment distribution
         summary += "TextBlob Sentiment Distribution:\n"
-        tb_counts = df['textblob_sentiment'].value_counts()
-        for sentiment, count in tb_counts.items():
-            percentage = (count / len(df)) * 100
+        for sentiment, count in stats['textblob']['distribution'].items():
+            percentage = (count / stats['total_posts']) * 100
             summary += f"  {sentiment.capitalize()}: {count} posts ({percentage:.1f}%)\n"
         
         summary += "\nVADER Sentiment Distribution:\n"
-        vader_counts = df['vader_sentiment'].value_counts()
-        for sentiment, count in vader_counts.items():
-            percentage = (count / len(df)) * 100
+        for sentiment, count in stats['vader']['distribution'].items():
+            percentage = (count / stats['total_posts']) * 100
             summary += f"  {sentiment.capitalize()}: {count} posts ({percentage:.1f}%)\n"
         
         summary += f"\nAverage Sentiment Scores:\n"
-        summary += f"  TextBlob average: {df['textblob_score'].mean():.3f}\n"
-        summary += f"  VADER average: {df['vader_score'].mean():.3f}\n"
+        summary += f"  TextBlob average: {stats['textblob']['average_score']:.3f}\n"
+        summary += f"  VADER average: {stats['vader']['average_score']:.3f}\n"
         
         # Most positive and negative posts
         summary += f"\nMost Positive Post (VADER):\n"
-        most_positive = df.loc[df['vader_score'].idxmax()]
-        summary += f"  Title: {most_positive['title'][:100]}...\n"
-        summary += f"  Score: {most_positive['vader_score']:.3f}\n"
-        summary += f"  Reddit Score: {most_positive['score']}\n"
+        summary += f"  Title: {stats['most_positive']['title'][:100]}...\n"
+        summary += f"  Score: {stats['most_positive']['score']:.3f}\n"
+        summary += f"  Reddit Score: {stats['most_positive']['reddit_score']}\n"
         
         summary += f"\nMost Negative Post (VADER):\n"
-        most_negative = df.loc[df['vader_score'].idxmin()]
-        summary += f"  Title: {most_negative['title'][:100]}...\n"
-        summary += f"  Score: {most_negative['vader_score']:.3f}\n"
-        summary += f"  Reddit Score: {most_negative['score']}\n"
+        summary += f"  Title: {stats['most_negative']['title'][:100]}...\n"
+        summary += f"  Score: {stats['most_negative']['score']:.3f}\n"
+        summary += f"  Reddit Score: {stats['most_negative']['reddit_score']}\n"
         
         return summary
     
@@ -394,9 +252,9 @@ class RedditSentimentGUI:
         
         # Create matplotlib figure
         try:
-            plt.style.use('default')  # Use default style instead of seaborn
+            plt.style.use('default')
         except:
-            pass  # If style doesn't exist, continue with default
+            pass
             
         fig, axes = plt.subplots(2, 2, figsize=(12, 8))
         fig.suptitle(f'Sentiment Analysis Results for r/{subreddit_name}', fontsize=14)
@@ -498,11 +356,3 @@ class RedditSentimentGUI:
             with open(filename, 'w') as f:
                 f.write(self.summary_text.get(1.0, tk.END))
             messagebox.showinfo("Success", f"Summary exported to {filename}")
-
-def main():
-    root = tk.Tk()
-    app = RedditSentimentGUI(root)
-    root.mainloop()
-
-if __name__ == "__main__":
-    main()
