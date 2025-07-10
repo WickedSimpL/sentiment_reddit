@@ -3,7 +3,7 @@
 ### Run Instructions
 - Initialize repo
 - Create .env
-- Add
+- Add <br>
 CLIENT_ID = "your_client_id"<br>
 CLIENT_SECRET = "your_client_secret"<br>
 USER_AGENT = "SentimentAnalyzer/1.0 by your_reddit_account_name"<br>
