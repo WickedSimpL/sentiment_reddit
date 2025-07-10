@@ -1,0 +1,7 @@
+praw
+pandas
+textblob
+vaderSentiment
+matplotlib
+seaborn
+python-dotenv
