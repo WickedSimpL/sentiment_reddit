@@ -71,7 +71,7 @@ class RedditSentimentGUI:
         ttk.Label(config_frame, text="Number of Posts:").grid(row=1, column=0, sticky=tk.W, padx=(0, 10), pady=(10, 0))
         self.num_posts_var = tk.StringVar(value="100")
         num_posts_combo = ttk.Combobox(config_frame, textvariable=self.num_posts_var, width=15)
-        num_posts_combo['values'] = ("25", "50", "100", "200", "500", "1000")
+        num_posts_combo['values'] = ("100", "1000", "10000", "50000", "1000000", "10000000")
         num_posts_combo.grid(row=1, column=1, sticky=tk.W, pady=(10, 0))
         
         # Time filter

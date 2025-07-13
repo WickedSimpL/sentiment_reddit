@@ -15,16 +15,16 @@ class SentimentAnalyzer:
     def __init__(self):
         """Initialize the sentiment analyzer and Reddit API connection"""
         # Load Reddit API credentials from environment variables
+        self.reddit = None
         self.CLIENT_ID = os.getenv('CLIENT_ID')
         self.CLIENT_SECRET = os.getenv('CLIENT_SECRET')
         self.USER_AGENT = os.getenv('USER_AGENT')
-        
-        # Initialize sentiment analyzer
-        self.vader_analyzer = SentimentIntensityAnalyzer()
-        self.reddit = None
-        
+          
         # Initialize Reddit connection
         self.initialize_reddit()
+
+         # Initialize sentiment analyzer
+        self.vader_analyzer = SentimentIntensityAnalyzer()
     
     def initialize_reddit(self):
         """Initialize Reddit API connection"""

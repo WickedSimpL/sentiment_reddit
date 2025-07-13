@@ -25,7 +25,7 @@ def main():
         root = tk.Tk()
         
         # Initialize the application
-        app = RedditSentimentGUI(root)
+        RedditSentimentGUI(root)
         
         # Start the GUI event loop
         root.mainloop()
