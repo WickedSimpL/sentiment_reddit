@@ -65,7 +65,7 @@ class RedditSentimentAnalyzer:
         self.model.eval()
         print("✓ BERT model loaded successfully")
         
-    def fetch_subreddit_posts(self, subreddit_name, limit=100, time_filter='week'):
+    def fetch_subreddit_posts(self, subreddit_name, limit=500, time_filter='month'):
         """
         Fetch posts from a specific subreddit with error handling
         """
@@ -322,7 +322,7 @@ if __name__ == "__main__":
         analyzer = RedditSentimentAnalyzer(CLIENT_ID, CLIENT_SECRET, USER_AGENT)
         
         # Analyze a subreddit
-        subreddit_name = "python"  # Change to your desired subreddit
+        subreddit_name = "economy"  # Change to your desired subreddit
         results = analyzer.analyze_subreddit(subreddit_name, num_posts=500, include_comments=True)
         
         if results:
